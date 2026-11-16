@@ -18,6 +18,11 @@ export const assistSchema = z.object({
   history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(12000) })).max(10),
   /** 是否允许联网搜索。 */
   web: z.boolean(),
+  /** 带稳定锚点的原文句子，翻译必须完整返回同一组 ID。 */
+  sentences: z.array(z.object({ id: z.string().regex(/^p\d+-b\d+-s\d+$/), text: z.string().min(1).max(60000) })).max(1500).optional(),
+}).superRefine((input, context) => {
+  if (!input.sentences) return;
+  if (input.mode !== 'translate' || !input.sentences.length || input.sentences.reduce((size, sentence) => size + sentence.text.length, 0) > 65000 || new Set(input.sentences.map(sentence => sentence.id)).size !== input.sentences.length) context.addIssue({ code: 'custom', message: '逐句翻译输入无效或过长。' });
 });
 
 /** 经校验的 AI 请求。 */
@@ -41,15 +46,17 @@ const INSTRUCTIONS = `你是“知页”的中文论文学习导师。用户希�
 对论文内容引用提供形如 [第 2 页] 的定位，不编造页码。未提供的页面不得声称已读。
 需要联网时优先论文原文、作者页面和官方文档，以 Markdown 链接给出来源；没有实际搜索到来源时明确说未核实。
 翻译任务只输出翻译，保留标题、段落、变量与数学符号，不追加总结或自我介绍。
+如果提供 translationUnits，必须只输出 JSON 对象 {"translations":[{"id":"原ID","text":"中文译文"}]}，逐一保留所有 ID，不增加、合并、拆分或遗漏任何项；不要输出 Markdown 代码围栏。相邻句子属于同一论文，可结合上下文理解，但译文必须回填原 ID。数学表达式、页码、引文编号保持原样。译文字符串不使用标题 # 等块级 Markdown。
 讲解要从直觉到机制，使用适当例子；无法从提供的材料得出时明确说明。`;
 
 /** 构造隔离输入，避免把用户文本拼成 shell 命令。 */
 export function makePrompt(input: AssistInput): string {
   return JSON.stringify({
-    task: input.mode === 'translate' ? '忠实翻译提供的论文文本为简体中文。' : input.question,
+    task: input.mode === 'translate' ? input.sentences ? '逐句忠实翻译 translationUnits 为简体中文，仅返回包含所有原 ID 的 translations JSON 数组，不合并句子。' : '忠实翻译提供的论文文本为简体中文。' : input.question,
     onlineResearchAllowed: input.web && input.mode !== 'translate',
     paperTitle: input.title,
     documentData: input.context,
+    translationUnits: input.sentences,
     recentConversation: input.history,
   });
 }

@@ -1,3 +1,5 @@
+import type { AlignedTranslation, PageLayout } from './layout';
+
 /** 一条可定位到页码的学习笔记。 */
 export interface StudyNote {
   /** 笔记唯一标识。 */
@@ -42,6 +44,10 @@ export interface Paper {
   pdf?: Blob;
   /** 逐页翻译缓存，键为从 1 开始的页码。 */
   translations: Record<string, string>;
+  /** 按页保存的原文结构；旧论文首次打开时按需恢复。 */
+  layouts?: Record<string, PageLayout>;
+  /** 与原文句子 ID 一一对应的新版译文。 */
+  alignedTranslations?: Record<string, AlignedTranslation>;
   /** 最近阅读页码。 */
   page: number;
   /** 学习笔记。 */
