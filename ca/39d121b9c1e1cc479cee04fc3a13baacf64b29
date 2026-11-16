@@ -1,0 +1,47 @@
+README.md
+  s_de716c22ff997d::t_093d01f59987f7 11,93,134,140
+src/layout.ts
+  s_de716c22ff997d::t_115fa3872dfca9 141-160,166-173,187,206
+  s_de716c22ff997d::t_17206bfbbde3fa 15,39-42,47,60-62,90,104-105,121-122,130-139,163,185-186,188,196,199-205,207,227-229,231-237,239-240,255-256,263-267,269-271,274-287
+  s_de716c22ff997d::t_49693425bcd43e 35,238,257-262
+  s_de716c22ff997d::t_093d01f59987f7 268
+  s_8dc9bdf71c8bc5::t_e7d5fa67a6202c 140
+src/pdf.ts
+  s_de716c22ff997d::t_7f0c50e31a31de 21-22,25
+src/PdfPage.tsx
+  s_de716c22ff997d::t_7f0c50e31a31de 58-59
+src/App.tsx
+  s_de716c22ff997d::t_7f0c50e31a31de 9,67,71-75,121-124,136-137,141-143
+src/style.css
+  s_de716c22ff997d::t_39d7ec8d1e2e10 13,28-30
+src/BilingualReader.tsx
+  s_de716c22ff997d::t_7f0c50e31a31de 30-31,134
+tests/layout.test.ts
+  s_de716c22ff997d::t_db0cb17982506b 68-117,135
+  s_de716c22ff997d::t_a9834332cc6a70 3,118-134
+  s_de716c22ff997d::t_878883f04c92fd 136-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "ca39d121b9c1e1cc479cee04fc3a13baacf64b29",
+  "prompts": {},
+  "sessions": {
+    "s_8dc9bdf71c8bc5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1aebf-c2d3-7722-a505-22fa70e107a3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "srunpass <94728671+srunpass@users.noreply.github.com>"
+    },
+    "s_de716c22ff997d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1e347-2947-7190-a1cc-ac853101f87f",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "srunpass <94728671+srunpass@users.noreply.github.com>"
+    }
+  }
+}
