@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.env*
+.runtime/
+public/pdf-assets/
+
+# 本机 AI 凭据、配置、会话与用户数据不得进入公开仓库。
+.codex/
+.config/
+.claude/
+auth.json
+credentials.json
+secrets.json
+*.pem
+*.key
+.npmrc
+*.sqlite
+*.sqlite3
+*.db
+uploads/
+exports/
+backups/
+
+# 私人开发记录与截图仅保留在本机。
+/docs/实施计划.md
+/docs/验证记录.md
+/docs/阅读器预览.jpg
