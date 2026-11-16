@@ -6,7 +6,7 @@ import { askCodex, getConnection } from './api';
 import { demoPaper, loadPapers, notesMarkdown, savePaper } from './storage';
 import { importPaper, pageText, readPdfLayout } from './pdf';
 import { BilingualReader } from './BilingualReader';
-import { textLayout, parseAlignedTranslation, translationText } from './layout';
+import { LAYOUT_VERSION, layoutSource, remapTranslation, textLayout, parseAlignedTranslation, translationText } from './layout';
 import type { Connection, Paper } from './types';
 
 /** 论文阅读、翻译和学习工作台。 */
@@ -64,11 +64,15 @@ export default function App() {
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [paper?.messages.length, draftAnswer, draftQuestion, tab]);
   useEffect(() => {
     let disposed = false;
-    if (!paper?.pdf || paper.layouts?.[paper.page]) { setLayoutLoading(false); return; }
+    if (!paper?.pdf || paper.layouts?.[paper.page]?.version === LAYOUT_VERSION) { setLayoutLoading(false); return; }
     const target = paper;
     setLayoutLoading(true);
     readPdfLayout(target.pdf!, target.page).then(result => {
-      if (!disposed) updatePaper(target.id, current => ({ ...current, layouts: { ...current.layouts, [target.page]: result }, pages: current.pages.map((text, index) => index + 1 === target.page ? pageText(result) : text) }));
+      if (!disposed) updatePaper(target.id, current => {
+        const aligned = remapTranslation(current.layouts?.[target.page], result, current.alignedTranslations?.[target.page]);
+        return { ...current, layouts: { ...current.layouts, [target.page]: result }, pages: current.pages.map((text, index) => index + 1 === target.page ? pageText(result) : text),
+          alignedTranslations: aligned ? { ...current.alignedTranslations, [target.page]: aligned } : current.alignedTranslations };
+      });
     }).catch(() => { if (!disposed) setToast('这页版式暂时无法恢复，仍可使用段落精读；原有学习资料已保留。'); })
       .finally(() => { if (!disposed) setLayoutLoading(false); });
     return () => { disposed = true; };
@@ -114,7 +118,10 @@ export default function App() {
   async function translate(all = false) {
     if (!paper || busyRef.current || layoutLoading) return;
     const target = paper;
-    const pages = all ? target.pages.map((_, index) => index + 1).filter(page => !target.alignedTranslations?.[page] && target.pages[page - 1].trim()) : [target.page];
+    const pages = all ? target.pages.map((_, index) => index + 1).filter(page => {
+      const existing = target.layouts?.[page];
+      return target.pages[page - 1].trim() && (!existing || existing.version !== LAYOUT_VERSION || target.alignedTranslations?.[page]?.source !== layoutSource(existing));
+    }) : [target.page];
     if (!pages.length) { setToast('所有可提取文本的页面都已翻译。'); return; }
     if (pages.some(page => target.pages[page - 1].length > 60000)) { setToast('页面文字过长，请拆分文本后翻译。'); return; }
     if (!all && !currentText.trim()) { setToast('此页没有可提取文字，请先进行 OCR。'); return; }
@@ -126,12 +133,14 @@ export default function App() {
         const page = pages[index];
         const label = all ? `全文翻译 ${index + 1}/${pages.length} · 第 ${page} 页` : `正在翻译第 ${page} 页`;
         setActivity(label);
-        const structure = target.layouts?.[page] || (target.pdf ? await readPdfLayout(target.pdf, page) : textLayout(target.pages[page - 1], page));
+        const previous = target.layouts?.[page];
+        const structure = previous?.version === LAYOUT_VERSION ? previous : target.pdf ? await readPdfLayout(target.pdf, page) : textLayout(target.pages[page - 1], page);
         if (abort.signal.aborted) break;
         const sentences = structure.blocks.flatMap(block => block.sentences.map(sentence => ({ id: sentence.id, text: sentence.text })));
         if (!sentences.length) continue;
-        const result = await askCodex({ mode: 'translate', title: target.title, question: '翻译为简体中文', context: '', sentences, history: [], web: false }, abort.signal, event => { if (event.type === 'status') setActivity(label + '…'); });
-        const aligned = parseAlignedTranslation(result.text, structure);
+        /** 全文升级时，能严格重映射的页面直接复用，不重复消耗翻译额度。 */
+        const reusable = all ? remapTranslation(previous, structure, target.alignedTranslations?.[page]) : undefined;
+        const aligned = reusable || parseAlignedTranslation((await askCodex({ mode: 'translate', title: target.title, question: '翻译为简体中文', context: '', sentences, history: [], web: false }, abort.signal, event => { if (event.type === 'status') setActivity(label + '…'); })).text, structure);
         if (!abort.signal.aborted) updatePaper(target.id, current => ({ ...current, pages: current.pages.map((text, index) => index + 1 === page ? pageText(structure) : text), layouts: { ...current.layouts, [page]: structure }, translations: { ...current.translations, [page]: translationText(structure, aligned) }, alignedTranslations: { ...current.alignedTranslations, [page]: aligned } }));
       }
     } catch (error) { if (!abort.signal.aborted) setToast(error instanceof Error ? error.message : '翻译失败，请重试。'); }

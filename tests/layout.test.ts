@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { positionedLayout, textLayout, parseAlignedTranslation, layoutSource, sentenceRanges, type TextRun } from '../src/layout.ts';
+import { positionedLayout, textLayout, parseAlignedTranslation, layoutSource, sentenceRanges, remapTranslation, type TextRun } from '../src/layout.ts';
 import { assistSchema } from '../server/ai.ts';
 
 /** 创建坐标可预测的 PDF 文本项，用于验证跨栏及乱序绘制。 */
@@ -64,4 +64,83 @@ test('结构化翻译的总文本量和重复 ID 受服务端约束', () => {
   assert.equal(assistSchema.safeParse({ ...base, sentences: [sentence, sentence] }).success, false);
   assert.equal(assistSchema.safeParse({ ...base, mode: 'chat', sentences: [sentence] }).success, false);
   assert.equal(assistSchema.safeParse({ ...base, sentences: [{ ...sentence, text: 'x'.repeat(40000) }, { id: 'p1-b0-s1', text: 'x'.repeat(40000) }] }).success, false);
+});
+
+test('同字号的摘要与章节标题独立成块，编号和标题保持同一个锚点', () => {
+  const layout = positionedLayout([
+    run(0, 'Abstract', 79, 373, 34, 9),
+    run(1, 'We study a planning problem with', 88, 389, 350, 9),
+    run(2, 'uncertain observations. A second sentence.', 79, 400, 359, 9),
+    run(3, 'Keywords: Planning; Uncertainty', 79, 430, 230, 8),
+    run(4, '1. Introduction', 79, 480, 80, 10),
+    run(5, 'The agent observes its environment.', 89, 504, 349, 10),
+  ], 543, 743, 1);
+  assert.equal(layout.blocks[0].kind, 'heading');
+  assert.deepEqual(layout.blocks[0].sentences.map(s => s.text), ['Abstract']);
+  assert.equal(layout.blocks[1].textIndent, 9);
+  assert.equal(layout.blocks[1].lineHeight, 11 / 9);
+  assert.equal(layout.blocks[2].kind, 'keywords');
+  assert.deepEqual(layout.blocks[3].sentences.map(s => s.text), ['1. Introduction']);
+  assert.equal(layout.blocks[3].kind, 'heading');
+});
+
+test('上标脚注各自成段，跨行脚注保留悬挂缩进', () => {
+  const layout = positionedLayout([
+    run(0, 'A normal body paragraph.', 79, 400, 359, 10),
+    { ...run(1, '*', 85, 609, 4, 6.8), baseline: 609 },
+    { ...run(2, 'Corresponding author.', 91, 606, 150, 8), baseline: 612 },
+    { ...run(3, '1', 85, 615, 4, 6.8), baseline: 620 },
+    { ...run(4, 'Supported by a research grant that', 91, 617, 230, 8), baseline: 623 },
+    { ...run(5, 'continues on the next line.', 91, 627, 180, 8), baseline: 633 },
+    { ...run(6, '2', 85, 635, 4, 6.8), baseline: 640 },
+    { ...run(7, 'Supported by another grant.', 91, 637, 220, 8), baseline: 643 },
+  ], 543, 743, 1);
+  const notes = layout.blocks.filter(block => block.kind === 'footnote');
+  assert.equal(notes.length, 3);
+  assert.equal(notes[0].sentences[0].text, '* Corresponding author.');
+  assert.match(notes[1].sentences[0].text, /^1 Supported.*continues/);
+  assert.equal(notes[1].hangingIndent, 6);
+  assert.deepEqual(notes[0].sentences[0].fragments.map(f => f.item), [1, 2]);
+});
+
+test('参考文献逐条保留，正文中的引用和编号列表不误判为章节标题', () => {
+  const layout = positionedLayout([
+    run(0, 'References', 79, 110, 70, 10),
+    run(1, '[1] A. Author, An academic paper, Journal,', 79, 134, 359, 8),
+    run(2, '10 (2024) 1–10.', 92, 144, 180, 8),
+    run(3, '[2] B. Author, Another paper.', 79, 154, 300, 8),
+    run(4, '1. Choose an action.', 79, 210, 200, 10),
+    run(5, '2. Observe the result.', 79, 222, 200, 10),
+  ], 543, 743, 34);
+  assert.equal(layout.blocks.filter(b => b.kind === 'reference').length, 2);
+  assert.equal(layout.blocks[1].hangingIndent, 13);
+  assert.equal(layout.blocks.at(-1)?.kind, 'paragraph');
+});
+
+test('排版升级仅复用原文及字符范围一致的译句，拆段与重复内容不会误配', () => {
+  const previous = positionedLayout([run(0, 'First sentence.', 50, 100), run(1, 'Second sentence.', 50, 116)], 600, 800, 1);
+  previous.version = 1;
+  const saved = parseAlignedTranslation(JSON.stringify({ translations: previous.blocks.flatMap(b => b.sentences).map((s, i) => ({ id: s.id, text: `译句${i}` })) }), previous);
+  const next = structuredClone(previous);
+  next.version = 2;
+  next.blocks[0].sentences.forEach((s, i) => { s.id = `p1-b2-s${i}`; });
+  const migrated = remapTranslation(previous, next, saved);
+  assert.equal(migrated?.source, layoutSource(next));
+  assert.equal(migrated?.segments['p1-b2-s1'], '译句1');
+  assert.equal(saved.segments['p1-b0-s1'], '译句1');
+  next.blocks[0].sentences[0].text = 'Different sentence.';
+  assert.equal(remapTranslation(previous, next, saved), undefined);
+  assert.equal(remapTranslation(undefined, next, saved), undefined);
+  assert.equal(remapTranslation(previous, next, { ...saved, source: 'stale' }), undefined);
+});
+
+test('重复句子按原 PDF 位置复用，签名相同时也校验字符范围', () => {
+  const previous = positionedLayout([run(0, 'Repeated sentence.', 50, 100), run(1, 'Repeated sentence.', 50, 116)], 600, 800, 1);
+  const saved = parseAlignedTranslation(JSON.stringify({ translations: previous.blocks[0].sentences.map((s, i) => ({ id: s.id, text: `译句${i}` })) }), previous);
+  const next = structuredClone(previous);
+  [next.blocks[0].sentences[0].fragments, next.blocks[0].sentences[1].fragments] = [next.blocks[0].sentences[1].fragments, next.blocks[0].sentences[0].fragments];
+  assert.equal(layoutSource(previous), layoutSource(next));
+  assert.equal(remapTranslation(previous, next, saved)?.segments['p1-b0-s0'], '译句1');
+  previous.blocks[0].sentences[1].fragments = previous.blocks[0].sentences[0].fragments;
+  assert.equal(remapTranslation(previous, previous, saved), undefined);
 });

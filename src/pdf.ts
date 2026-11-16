@@ -18,10 +18,11 @@ export async function extractPageLayout(page: PDFPageProxy): Promise<PageLayout>
     const transform = Util.transform(viewport.transform, item.transform);
     const fontSize = Math.hypot(transform[2], transform[3]);
     const style = content.styles[item.fontName];
-    const ascent = style?.ascent ?? (style?.descent ? 1 + style.descent : .8);
+    /** 老 PDF 的字体度量可能是 NaN 或零；退回字面框，避免丢失整页或错行。 */
+    const ascent = Number.isFinite(style?.ascent) && style.ascent > 0 ? style.ascent : .8;
     /** 旋转/竖排文本仍由原图显示，不创建可能遮盖图表的翻译块。 */
     if (Math.abs(transform[1]) < .1 && !style?.vertical) runs.push({ index, text: item.str, x: transform[4], y: transform[5] - fontSize * ascent,
-      width: item.width, height: fontSize, fontSize, bold: /bold|black|heavy/i.test(item.fontName + ' ' + style?.fontFamily) });
+      width: item.width, height: fontSize, fontSize, baseline: transform[5], bold: /bold|black|heavy/i.test(item.fontName + ' ' + style?.fontFamily) });
     index++;
   }
   return positionedLayout(runs, viewport.width, viewport.height, page.pageNumber);

@@ -55,7 +55,8 @@ function TranslatedBlock({ block, layout, translation, activeIds, onExpand, back
   }, [block, translation]);
   if (block.kind === 'formula') return <button className={`formula-anchor ${block.sentences.some(sentence => activeIds.includes(sentence.id)) ? 'is-anchored' : ''}`} style={blockPosition(block, layout)} data-anchor-id={block.sentences[0]?.id} aria-label={`公式保持原版：${block.sentences.map(sentence => sentence.text).join(' ')}`} />;
   return <div className={`pdf-translation-block block-${block.kind} ${overflow ? 'overfull' : ''}`} style={{ ...blockPosition(block, layout), background, boxShadow: `0 0 0 1.5px ${background || 'white'}` }}>
-    <div ref={box} className="pdf-translated-text" style={{ fontWeight: block.bold || block.kind === 'heading' ? 600 : 400 }}>
+    <div ref={box} className="pdf-translated-text" style={{ fontWeight: block.bold ? 600 : 400, textAlign: block.align || 'left',
+      lineHeight: block.lineHeight || 1.15, textIndent: `${((block.textIndent || 0) - (block.hangingIndent || 0)) / block.fontSize}em`, paddingLeft: `${(block.hangingIndent || 0) / block.fontSize}em` }}>
       {block.sentences.map(sentence => <span key={sentence.id} data-anchor-id={sentence.id} tabIndex={0} className={`sentence ${activeIds.includes(sentence.id) ? 'is-anchored' : ''}`}>{translation.segments[sentence.id]}</span>)}
     </div>
     {overflow && <button className="expand-block" aria-label="展开完整译文段落" title="此段译文较长，点击在段落精读中完整阅读" onClick={() => onExpand(block.sentences[0].id)}>↗</button>}

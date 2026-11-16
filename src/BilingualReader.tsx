@@ -27,7 +27,8 @@ function FlowBlock({ block, translated, activeIds, segments }: {
   /** 对应的译文映射。 */ segments?: Record<string, string>;
 }) {
   const Tag = block.kind === 'heading' ? 'h2' : 'p';
-  return <Tag className={`flow-block block-${block.kind}`}>
+  return <Tag className={`flow-block block-${block.kind}`} style={{ textAlign: block.align,
+    textIndent: `${((block.textIndent || 0) - (block.hangingIndent || 0)) / block.fontSize}em`, paddingLeft: `${(block.hangingIndent || 0) / block.fontSize}em` }}>
     {block.sentences.map(sentence => <span className={`sentence ${activeIds.includes(sentence.id) ? 'is-anchored' : ''}`} data-anchor-id={sentence.id} tabIndex={0} key={sentence.id}>
       {translated ? segments?.[sentence.id] : sentence.text.replace(/^#{1,6}\s/, '')}{!translated && ' '}
     </span>)}
@@ -130,7 +131,7 @@ export function BilingualReader({ paper, layout, view, zoom, busy, selection, on
       {view !== 'original' && <section className="reader-pane" ref={translationPane} aria-label="中文译文" onMouseUp={event => capture(event, 'translation')} onKeyUp={event => capture(event, 'translation')}>
         <div className="column-heading"><span><b>中</b> 中文译文</span><small>{aligned ? <><Check size={12} />逐句对应 · 已保存</> : legacy ? '旧版译文已保留' : '等待翻译'}</small></div>
         {aligned ? <div className={`page-content ${positioned ? 'positioned' : 'flow-content'}`} style={{ width: `${zoom}%` }}>{positioned ? <PdfPage blob={paper.pdf!} page={paper.page} layout={layout} translation={aligned} activeIds={activeIds} onExpand={expand} /> : <article className="flow-page translation">{layout.blocks.map(block => <FlowBlock key={block.id} block={block} translated activeIds={activeIds} segments={aligned.segments} />)}</article>}</div>
-          : legacy ? <div className="legacy-translation"><div className="upgrade-translation"><Link2 size={17} /><p>这页是旧版整页翻译。升级后可保留版式、选句双向定位。</p><button disabled={busy} onClick={onTranslate}>升级为逐句对照</button></div><article className="markdown flow-page translation"><Markdown remarkPlugins={[remarkGfm]}>{legacy}</Markdown></article></div>
+          : legacy ? <div className="legacy-translation"><div className="upgrade-translation"><Link2 size={17} /><p>本页的标题和段落结构已更新。旧译文保留在下方，重新翻译后按新结构排版并恢复句子定位。</p><button disabled={busy} onClick={onTranslate}>按新版式翻译</button></div><article className="markdown flow-page translation"><Markdown remarkPlugins={[remarkGfm]}>{legacy}</Markdown></article></div>
           : <div className="translation-empty"><div className="translation-mark"><Languages size={30} strokeWidth={1.4} /></div><span className="empty-eyebrow">READ ACROSS LANGUAGES</span><h2>同一篇论文，<br />用熟悉的语言读懂。</h2><p>保留段落与页面结构。选中一句，<br />原文与译文同步定位。</p><button className="primary-button" disabled={busy || !sentences.length} onClick={onTranslate}><Sparkles size={15} />{busy ? '正在处理…' : '翻译这一页'}</button><small>使用你自己的 Codex 账号</small></div>}
       </section>}
     </div>
